@@ -1,0 +1,34 @@
+---
+# ServiceAccount used by the pod. Vault's Kubernetes auth role is bound to this SA.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vso-demo-app
+  namespace: vso-demo  # CHANGE: your namespace
+---
+# Role lets the sidecar container call `kubectl get secret db-creds`.
+# Scoped tightly: only the named Secret, only get/watch.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: secret-reader
+  namespace: vso-demo  # CHANGE: your namespace
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["db-creds"]
+    verbs: ["get", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: vso-demo-app-secret-reader
+  namespace: vso-demo  # CHANGE: your namespace
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: secret-reader
+subjects:
+  - kind: ServiceAccount
+    name: vso-demo-app
+    namespace: vso-demo  # CHANGE: your namespace

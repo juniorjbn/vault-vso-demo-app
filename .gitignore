@@ -1,0 +1,24 @@
+# Environment overrides
+.env
+.env.local
+*.local
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+
+# Python (if you hack on app/ locally)
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Kubernetes / Vault scratch
+kubeconfig
+*.kubeconfig
+*.token
+tmp/

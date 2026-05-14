@@ -1,0 +1,19 @@
+---
+# ClusterIP service. Use `kubectl port-forward` to access from your laptop, or
+# put an Ingress / LoadBalancer in front for shared access.
+#
+# If you want to expose via NodePort, set spec.type to NodePort and add a
+# nodePort value (or let the API assign one).
+apiVersion: v1
+kind: Service
+metadata:
+  name: vso-demo-app
+  namespace: vso-demo  # CHANGE: your namespace
+spec:
+  type: ClusterIP
+  selector:
+    app: vso-demo-app
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080

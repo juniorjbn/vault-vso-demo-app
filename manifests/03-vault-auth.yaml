@@ -1,0 +1,18 @@
+---
+# How VSO authenticates to Vault on behalf of this namespace.
+# Uses Kubernetes auth: the SA's projected token is exchanged for a Vault token.
+#
+# `mount` is the path of the Kubernetes auth method in Vault (default: "kubernetes").
+# `role` is the Vault role configured by vault/setup-vault.sh.
+apiVersion: secrets.hashicorp.com/v1beta1
+kind: VaultAuth
+metadata:
+  name: vault-auth
+  namespace: vso-demo  # CHANGE: your namespace
+spec:
+  method: kubernetes
+  mount: kubernetes  # CHANGE: the auth path used by your cluster (e.g. "kubernetes" or "kubernetes-<cluster>")
+  kubernetes:
+    role: vso-demo
+    serviceAccount: vso-demo-app
+  vaultConnectionRef: vault-connection

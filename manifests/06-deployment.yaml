@@ -1,0 +1,104 @@
+---
+# Two-container pod:
+#   - webapp: Flask UI, re-reads /shared/credentials.txt + /static-config + /tls on every request.
+#   - credential-monitor (sidecar): polls the K8s Secret db-creds and writes /shared/credentials.txt.
+#
+# Shared volume: emptyDir (lives only as long as the pod, fine for this demo).
+# Static + PKI Secrets are mounted directly into the webapp; kubelet propagates updates.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vso-demo-app
+  namespace: vso-demo  # CHANGE: your namespace
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: vso-demo-app
+  template:
+    metadata:
+      labels:
+        app: vso-demo-app
+    spec:
+      serviceAccountName: vso-demo-app
+      volumes:
+        - name: shared-data
+          emptyDir: {}
+        - name: app-code
+          configMap:
+            name: vso-demo-app-code
+            defaultMode: 0755
+        - name: static-config
+          secret:
+            secretName: vso-demo-static-config
+            optional: true
+        - name: pki-cert
+          secret:
+            secretName: vso-demo-pki-cert
+            optional: true
+      containers:
+        # ---- Container 1: webapp (Flask) ----
+        - name: webapp
+          image: python:3.12-slim
+          workingDir: /app
+          command: ["sh", "-c"]
+          args:
+            - |
+              pip install --quiet --no-cache-dir flask cryptography pygments &&
+              python /app/app.py
+          ports:
+            - name: http
+              containerPort: 8080
+          volumeMounts:
+            - name: app-code
+              mountPath: /app
+            - name: shared-data
+              mountPath: /shared
+            - name: static-config
+              mountPath: /static-config
+              readOnly: true
+            - name: pki-cert
+              mountPath: /tls
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            # initialDelay covers the `pip install` on first boot.
+            initialDelaySeconds: 45
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+        # ---- Container 2: credential-monitor (sidecar) ----
+        - name: credential-monitor
+          image: bitnami/kubectl:latest
+          env:
+            - name: NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POLL_SECONDS
+              value: "3"
+          command: ["/bin/bash", "/app/sidecar.sh"]
+          volumeMounts:
+            - name: app-code
+              mountPath: /app
+            - name: shared-data
+              mountPath: /shared
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi

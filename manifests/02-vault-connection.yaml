@@ -1,0 +1,19 @@
+---
+# Tells VSO where Vault lives. One per namespace (typically).
+#
+# If your Vault uses a publicly-trusted certificate (Let's Encrypt etc.) leave
+# caCertSecretRef out. If it uses a private CA, create a Secret named `vault-ca`
+# in this namespace with key `ca.crt`:
+#
+#   kubectl -n vso-demo create secret generic vault-ca --from-file=ca.crt=/path/to/ca.crt
+#
+# Or, for quick experiments only, set skipTLSVerify: true.
+apiVersion: secrets.hashicorp.com/v1beta1
+kind: VaultConnection
+metadata:
+  name: vault-connection
+  namespace: vso-demo  # CHANGE: your namespace
+spec:
+  address: "https://vault.example.com:8200"  # CHANGE: your Vault address
+  skipTLSVerify: false
+  caCertSecretRef: vault-ca  # CHANGE or remove: name of the Secret holding ca.crt
