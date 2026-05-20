@@ -15,7 +15,6 @@ watch values rotate in real time while the pod uptime counter keeps growing.
 
 ![screenshot placeholder](docs/screenshot.png)
 
-> Add your own screenshot at `docs/screenshot.png` once you've deployed.
 
 ## What it demonstrates
 
