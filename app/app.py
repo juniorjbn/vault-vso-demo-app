@@ -47,6 +47,15 @@ VAULT_META = {
     "vault_db_mount": os.getenv("VAULT_DB_MOUNT", "n/a"),
     "vault_db_role": os.getenv("VAULT_DB_ROLE", "n/a"),
     "vault_db_ttl": os.getenv("VAULT_DB_TTL", "90s"),
+    "vault_kv_mount": os.getenv("VAULT_KV_MOUNT", "n/a"),
+    "vault_kv_path": os.getenv("VAULT_KV_PATH", "n/a"),
+    "vault_kv_type": os.getenv("VAULT_KV_TYPE", "kv-v2"),
+    "vault_kv_refresh": os.getenv("VAULT_KV_REFRESH", "30s"),
+    "vault_pki_mount": os.getenv("VAULT_PKI_MOUNT", "n/a"),
+    "vault_pki_role": os.getenv("VAULT_PKI_ROLE", "n/a"),
+    "vault_pki_cn": os.getenv("VAULT_PKI_CN", "n/a"),
+    "vault_pki_ttl": os.getenv("VAULT_PKI_TTL", "5m"),
+    "vault_pki_expiry_offset": os.getenv("VAULT_PKI_EXPIRY_OFFSET", "2m"),
 }
 
 
@@ -226,6 +235,16 @@ details.box>.box-content{padding:1em 1.5em 1.2em 1.5em}
   <div class="box-content">
     <div class="jq">{{ static_html|safe }}</div>
     <div class="hint">Edit the KV path in Vault and the UI picks it up within ~30s. No pod restart.</div>
+
+    <div class="meta-grid">
+      <div class="meta-h">How this app connects to Vault</div>
+      <div class="meta-row"><span class="meta-k">ServiceAccount</span><span class="meta-v">{{ sa_name }}</span></div>
+      <div class="meta-row"><span class="meta-k">VaultConnection address</span><span class="meta-v">{{ vault_addr }}</span></div>
+      <div class="meta-row"><span class="meta-k">VaultAuth mount / role</span><span class="meta-v">{{ vault_auth_mount }} &middot; {{ vault_auth_role }}</span></div>
+      <div class="meta-row"><span class="meta-k">KV engine mount / path</span><span class="meta-v">{{ vault_kv_mount }} &middot; {{ vault_kv_path }}</span></div>
+      <div class="meta-row"><span class="meta-k">KV engine type</span><span class="meta-v">{{ vault_kv_type }}</span></div>
+      <div class="meta-row"><span class="meta-k">refreshAfter</span><span class="meta-v">{{ vault_kv_refresh }}</span></div>
+    </div>
   </div>
 </details>
 
@@ -234,6 +253,16 @@ details.box>.box-content{padding:1em 1.5em 1.2em 1.5em}
   <div class="box-content">
     <div class="jq">{{ pki_html|safe }}</div>
     <div class="hint">Serial and validity window rotate every ~3 minutes. VSO renews the cert, kubelet remounts the files, the pod keeps running.</div>
+
+    <div class="meta-grid">
+      <div class="meta-h">How this app connects to Vault</div>
+      <div class="meta-row"><span class="meta-k">ServiceAccount</span><span class="meta-v">{{ sa_name }}</span></div>
+      <div class="meta-row"><span class="meta-k">VaultConnection address</span><span class="meta-v">{{ vault_addr }}</span></div>
+      <div class="meta-row"><span class="meta-k">VaultAuth mount / role</span><span class="meta-v">{{ vault_auth_mount }} &middot; {{ vault_auth_role }}</span></div>
+      <div class="meta-row"><span class="meta-k">PKI engine mount / role</span><span class="meta-v">{{ vault_pki_mount }} &middot; {{ vault_pki_role }}</span></div>
+      <div class="meta-row"><span class="meta-k">Requested CommonName</span><span class="meta-v">{{ vault_pki_cn }}</span></div>
+      <div class="meta-row"><span class="meta-k">Cert TTL / expiryOffset</span><span class="meta-v">{{ vault_pki_ttl }} &middot; renew {{ vault_pki_expiry_offset }} early</span></div>
+    </div>
   </div>
 </details>
 
