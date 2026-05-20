@@ -37,6 +37,18 @@ PKI_CRT = "/tls/tls.crt"                 # mounted from VaultPKISecret
 
 counter = 0
 
+# Static metadata about how this pod connects to Vault. Sourced from env
+# vars set on the Deployment — read once at boot.
+VAULT_META = {
+    "sa_name": os.getenv("SA_NAME", "app-sidecar"),
+    "vault_addr": os.getenv("VAULT_ADDR", "n/a"),
+    "vault_auth_mount": os.getenv("VAULT_AUTH_MOUNT", "n/a"),
+    "vault_auth_role": os.getenv("VAULT_AUTH_ROLE", "n/a"),
+    "vault_db_mount": os.getenv("VAULT_DB_MOUNT", "n/a"),
+    "vault_db_role": os.getenv("VAULT_DB_ROLE", "n/a"),
+    "vault_db_ttl": os.getenv("VAULT_DB_TTL", "90s"),
+}
+
 
 def read_credentials():
     """Read DB credentials from the shared volume (refreshed by the sidecar)."""
@@ -149,6 +161,16 @@ details.box>summary .chev{display:inline-block;transition:transform .18s ease;co
 details.box[open]>summary .chev{transform:rotate(90deg)}
 details.box>summary .label{margin-bottom:0;flex:1}
 details.box>.box-content{padding:1em 1.5em 1.2em 1.5em}
+.reveal-btn{background:#334155;color:#e2e8f0;border:1px solid #475569;padding:.15em .65em;border-radius:5px;font-size:.78em;cursor:pointer;font-family:inherit;margin-left:.6em;vertical-align:middle}
+.reveal-btn:hover{background:#475569}
+.reveal-btn.on{background:#fbbf24;border-color:#d97706;color:#0f172a;font-weight:600}
+.pwd-plain .big.plain{color:#fbbf24;font-family:'SF Mono',Consolas,monospace}
+.meta-grid{margin-top:.9em;border-top:1px dashed #334155;padding-top:.7em}
+.meta-h{color:#a855f7;font-size:.78em;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.5em;font-weight:600}
+.meta-row{display:flex;justify-content:space-between;align-items:baseline;gap:1em;padding:.18em 0;font-size:.88em;border-bottom:1px solid #1e293b}
+.meta-row:last-child{border-bottom:0}
+.meta-k{color:#94a3b8;flex:0 0 auto}
+.meta-v{font-family:'SF Mono',Consolas,monospace;color:#7dd3fc;text-align:right;word-break:break-all}
 </style>
 </head><body>
 <h1>Vault Secrets Operator &mdash; three patterns, zero restarts</h1>
@@ -173,9 +195,22 @@ details.box>.box-content{padding:1em 1.5em 1.2em 1.5em}
   <summary><span class="chev">&#9656;</span><div class="label">Pattern 1 &mdash; Dynamic Secret (PostgreSQL via sidecar)</div></summary>
   <div class="box-content">
     <div class="val">DB user: <span class="big">{{ db_user }}</span></div>
-    <div class="val">Password (sha256, 12 chars): <span class="big">{{ pwd_fp }}</span></div>
+    <div class="val">
+      Password (sha256, 12 chars): <span class="big">{{ pwd_fp }}</span>
+      <button class="reveal-btn" type="button" onclick="togglePwd()" id="pwdBtn">show plain password</button>
+    </div>
+    <div class="val pwd-plain" id="pwdPlain" hidden>Plain password: <span class="big plain">{{ pwd_plain }}</span></div>
     <div class="val">Last sidecar update: {{ updated }}</div>
-    <div class="hint">Sidecar polls K8s Secret <code>db-creds</code> every 3s and writes <code>/shared/credentials.txt</code>. VSO renews the Vault lease near expiry; the new values land here without restarting the pod.</div>
+
+    <div class="meta-grid">
+      <div class="meta-h">How this app connects to Vault</div>
+      <div class="meta-row"><span class="meta-k">ServiceAccount</span><span class="meta-v">{{ sa_name }}</span></div>
+      <div class="meta-row"><span class="meta-k">VaultConnection address</span><span class="meta-v">{{ vault_addr }}</span></div>
+      <div class="meta-row"><span class="meta-k">VaultAuth mount / role</span><span class="meta-v">{{ vault_auth_mount }} &middot; {{ vault_auth_role }}</span></div>
+      <div class="meta-row"><span class="meta-k">Database engine mount / role</span><span class="meta-v">{{ vault_db_mount }} &middot; {{ vault_db_role }}</span></div>
+      <div class="meta-row"><span class="meta-k">Configured lease TTL</span><span class="meta-v">{{ vault_db_ttl }}</span></div>
+    </div>
+    <div class="hint">Chain: SA <code>{{ sa_name }}</code> presents its JWT to auth mount <code>{{ vault_auth_mount }}</code>, gets back a Vault token authorized to read <code>{{ vault_db_mount }}/creds/{{ vault_db_role }}</code>. VSO renews the lease before TTL expires and rewrites K8s Secret <code>db-creds</code>; the sidecar (bitnami/kubectl) copies it into <code>/shared/credentials.txt</code>; Flask re-reads on each request.</div>
   </div>
 </details>
 
@@ -266,6 +301,20 @@ details.box>.box-content{padding:1em 1.5em 1.2em 1.5em}
   render();
   setInterval(tick, 1000);
 })();
+window.togglePwd = function(){
+  var el = document.getElementById('pwdPlain');
+  var btn = document.getElementById('pwdBtn');
+  if (!el || !btn) return;
+  if (el.hasAttribute('hidden')) {
+    el.removeAttribute('hidden');
+    btn.textContent = 'hide plain password';
+    btn.classList.add('on');
+  } else {
+    el.setAttribute('hidden','');
+    btn.textContent = 'show plain password';
+    btn.classList.remove('on');
+  }
+};
 (function(){
   var STORAGE_KEY = 'vsoDemoBoxOpen';
   var open = {};
@@ -294,6 +343,7 @@ def index():
         PAGE,
         db_user=creds.get("username", "(no creds yet)"),
         pwd_fp=pwd_hash(creds.get("password", "")),
+        pwd_plain=creds.get("password", "(no creds yet)"),
         updated=creds.get("updated", "never"),
         uptime=uptime,
         pod_start=POD_START.strftime("%Y-%m-%d %H:%M:%S UTC"),
@@ -301,6 +351,7 @@ def index():
         counter=counter,
         static_html=hl_json(read_static_config()),
         pki_html=hl_json(read_pki_cert()),
+        **VAULT_META,
     )
 
 
