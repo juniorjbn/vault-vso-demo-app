@@ -140,6 +140,15 @@ h1{color:#a855f7;margin:0 0 .3em 0;font-size:1.7em}
 .controls button.off{background:#ef4444;border-color:#b91c1c;color:white;font-weight:600}
 .controls .countdown{color:#fbbf24;font-family:'SF Mono',Consolas,monospace;font-size:.9em;margin-left:auto}
 .controls select{background:#0b1220;color:#e2e8f0;border:1px solid #475569;padding:.45em .7em;border-radius:6px;font-size:.9em;font-family:inherit}
+details.box{padding:0}
+details.box>summary{list-style:none;cursor:pointer;padding:1.2em 1.5em;display:flex;align-items:center;gap:.7em;border-radius:10px;user-select:none}
+details.box>summary::-webkit-details-marker{display:none}
+details.box>summary::marker{display:none}
+details.box[open]>summary{border-radius:10px 10px 0 0;border-bottom:1px solid #334155}
+details.box>summary .chev{display:inline-block;transition:transform .18s ease;color:#94a3b8;font-size:1em;flex:0 0 auto}
+details.box[open]>summary .chev{transform:rotate(90deg)}
+details.box>summary .label{margin-bottom:0;flex:1}
+details.box>.box-content{padding:1em 1.5em 1.2em 1.5em}
 </style>
 </head><body>
 <h1>Vault Secrets Operator &mdash; three patterns, zero restarts</h1>
@@ -160,13 +169,15 @@ h1{color:#a855f7;margin:0 0 .3em 0;font-size:1.7em}
   <span class="countdown" id="countdown">next: 10s</span>
 </div>
 
-<div class="box cred">
-  <div class="label">Pattern 1 &mdash; Dynamic Secret (PostgreSQL via sidecar)</div>
-  <div class="val">DB user: <span class="big">{{ db_user }}</span></div>
-  <div class="val">Password (sha256, 12 chars): <span class="big">{{ pwd_fp }}</span></div>
-  <div class="val">Last sidecar update: {{ updated }}</div>
-  <div class="hint">Sidecar polls K8s Secret <code>db-creds</code> every 3s and writes <code>/shared/credentials.txt</code>. VSO renews the Vault lease near expiry; the new values land here without restarting the pod.</div>
-</div>
+<details class="box cred" data-box="cred">
+  <summary><span class="chev">&#9656;</span><div class="label">Pattern 1 &mdash; Dynamic Secret (PostgreSQL via sidecar)</div></summary>
+  <div class="box-content">
+    <div class="val">DB user: <span class="big">{{ db_user }}</span></div>
+    <div class="val">Password (sha256, 12 chars): <span class="big">{{ pwd_fp }}</span></div>
+    <div class="val">Last sidecar update: {{ updated }}</div>
+    <div class="hint">Sidecar polls K8s Secret <code>db-creds</code> every 3s and writes <code>/shared/credentials.txt</code>. VSO renews the Vault lease near expiry; the new values land here without restarting the pod.</div>
+  </div>
+</details>
 
 <div class="box timer">
   <div class="label">Pod uptime</div>
@@ -175,27 +186,33 @@ h1{color:#a855f7;margin:0 0 .3em 0;font-size:1.7em}
   <div class="val">If this number only grows, the pod has never restarted.</div>
 </div>
 
-<div class="box static">
-  <div class="label">Pattern 2 &mdash; Static Secret (KV v2, refreshAfter 30s)</div>
-  <div class="jq">{{ static_html|safe }}</div>
-  <div class="hint">Edit the KV path in Vault and the UI picks it up within ~30s. No pod restart.</div>
-</div>
+<details class="box static" data-box="static">
+  <summary><span class="chev">&#9656;</span><div class="label">Pattern 2 &mdash; Static Secret (KV v2, refreshAfter 30s)</div></summary>
+  <div class="box-content">
+    <div class="jq">{{ static_html|safe }}</div>
+    <div class="hint">Edit the KV path in Vault and the UI picks it up within ~30s. No pod restart.</div>
+  </div>
+</details>
 
-<div class="box pki">
-  <div class="label">Pattern 3 &mdash; PKI Secret (TTL 5m, expiryOffset 2m)</div>
-  <div class="jq">{{ pki_html|safe }}</div>
-  <div class="hint">Serial and validity window rotate every ~3 minutes. VSO renews the cert, kubelet remounts the files, the pod keeps running.</div>
-</div>
+<details class="box pki" data-box="pki">
+  <summary><span class="chev">&#9656;</span><div class="label">Pattern 3 &mdash; PKI Secret (TTL 5m, expiryOffset 2m)</div></summary>
+  <div class="box-content">
+    <div class="jq">{{ pki_html|safe }}</div>
+    <div class="hint">Serial and validity window rotate every ~3 minutes. VSO renews the cert, kubelet remounts the files, the pod keeps running.</div>
+  </div>
+</details>
 
-<div class="box flow">
-  <div class="label">Sidecar pattern (Pattern 1 only)</div>
-  <div class="step">VaultDynamicSecret requests fresh DB credentials with a short TTL.</div>
-  <div class="step">Sidecar (kubectl) reads Secret <code>db-creds</code> every 3s.</div>
-  <div class="step">Sidecar writes <code>/shared/credentials.txt</code> on a shared <code>emptyDir</code>.</div>
-  <div class="step">Webapp re-reads the file on each HTTP request.</div>
-  <div class="step">VSO renews the lease at <code>renewalPercent</code> &rarr; Secret updated &rarr; sidecar picks it up within 3s.</div>
-  <div class="step"><strong>Pod uptime keeps increasing. No restart. No request loss.</strong></div>
-</div>
+<details class="box flow" data-box="flow">
+  <summary><span class="chev">&#9656;</span><div class="label">Sidecar pattern (Pattern 1 only)</div></summary>
+  <div class="box-content">
+    <div class="step">VaultDynamicSecret requests fresh DB credentials with a short TTL.</div>
+    <div class="step">Sidecar (kubectl) reads Secret <code>db-creds</code> every 3s.</div>
+    <div class="step">Sidecar writes <code>/shared/credentials.txt</code> on a shared <code>emptyDir</code>.</div>
+    <div class="step">Webapp re-reads the file on each HTTP request.</div>
+    <div class="step">VSO renews the lease at <code>renewalPercent</code> &rarr; Secret updated &rarr; sidecar picks it up within 3s.</div>
+    <div class="step"><strong>Pod uptime keeps increasing. No restart. No request loss.</strong></div>
+  </div>
+</details>
 
 <div class="footer">request #{{ counter }} &middot; refresh controls at the top</div>
 <script>
@@ -248,6 +265,19 @@ h1{color:#a855f7;margin:0 0 .3em 0;font-size:1.7em}
   };
   render();
   setInterval(tick, 1000);
+})();
+(function(){
+  var STORAGE_KEY = 'vsoDemoBoxOpen';
+  var open = {};
+  try { open = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}') || {}; } catch (e) { open = {}; }
+  document.querySelectorAll('details.box[data-box]').forEach(function(el){
+    var key = el.getAttribute('data-box');
+    if (open[key]) el.setAttribute('open','');
+    el.addEventListener('toggle', function(){
+      open[key] = el.open;
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(open)); } catch (e) {}
+    });
+  });
 })();
 </script>
 </body></html>"""
