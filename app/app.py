@@ -132,7 +132,7 @@ def pwd_hash(pwd):
 
 
 PAGE = """<!DOCTYPE html><html lang="en"><head>
-<meta charset="utf-8"><title>Vault Secrets Operator — three patterns, one pod</title>
+<meta charset="utf-8"><title>Vault — Sidecar Refresh (sem restart)</title>
 <style>
 body{font-family:-apple-system,Segoe UI,sans-serif;max-width:920px;margin:1.5em auto;padding:1.5em;background:#0f172a;color:#e2e8f0}
 h1{color:#a855f7;margin:0 0 .3em 0;font-size:1.7em}
@@ -182,62 +182,62 @@ details.box>.box-content{padding:1em 1.5em 1.2em 1.5em}
 .meta-v{font-family:'SF Mono',Consolas,monospace;color:#7dd3fc;text-align:right;word-break:break-all}
 </style>
 </head><body>
-<h1>Vault Secrets Operator &mdash; three patterns, zero restarts</h1>
-<p class="sub">One pod consumes secrets from Vault through three different VSO resources (Dynamic, Static, PKI). Each block below re-reads its source on every request. The pod uptime counter just keeps growing.</p>
+<h1>🔄 Vault — Sidecar Refresh (pod NUNCA restarta)</h1>
+<p class="sub">Sidecar le credenciais do K8s Secret e escreve em <code>/shared/credentials.txt</code>. Esta app re-le do arquivo a cada request. Quando o VSO atualiza o Secret (renovacao do lease Vault), o sidecar copia pro volume. Webapp continua rodando — sem rolloutRestartTargets.</p>
 
 <div class="controls">
-  <button id="toggleBtn" onclick="toggleAuto()">Pause auto-refresh</button>
-  <button onclick="window.location.reload()">Refresh now</button>
-  <label>Interval:
+  <button id="toggleBtn" onclick="toggleAuto()">Pausar auto-refresh</button>
+  <button onclick="window.location.reload()">🔄 Atualizar agora</button>
+  <label>Intervalo:
     <select id="intervalSel" onchange="changeInterval()">
-      <option value="3">3s (fast)</option>
-      <option value="10" selected>10s (default)</option>
+      <option value="3">3s (rapido)</option>
+      <option value="10" selected>10s (normal)</option>
       <option value="30">30s</option>
       <option value="60">60s</option>
       <option value="0">manual</option>
     </select>
   </label>
-  <span class="countdown" id="countdown">next: 10s</span>
+  <span class="countdown" id="countdown">próximo: 10s</span>
 </div>
 
 <details class="box cred" data-box="cred">
-  <summary><span class="chev">&#9656;</span><div class="label">Pattern 1 &mdash; Dynamic Secret (PostgreSQL via sidecar)</div></summary>
+  <summary><span class="chev">&#9656;</span><div class="label">Credenciais ATUAIS (lidas agora do volume)</div></summary>
   <div class="box-content">
-    <div class="val">DB user: <span class="big">{{ db_user }}</span></div>
+    <div class="val">Usuario PostgreSQL: <span class="big">{{ db_user }}</span></div>
     <div class="val">
-      Password (sha256, 12 chars): <span class="big">{{ pwd_fp }}</span>
-      <button class="reveal-btn" type="button" onclick="togglePwd()" id="pwdBtn">show plain password</button>
+      Senha (sha256, 12 chars): <span class="big">{{ pwd_fp }}</span>
+      <button class="reveal-btn" type="button" onclick="togglePwd()" id="pwdBtn">mostrar senha</button>
     </div>
-    <div class="val pwd-plain" id="pwdPlain" hidden>Plain password: <span class="big plain">{{ pwd_plain }}</span></div>
-    <div class="val">Last sidecar update: {{ updated }}</div>
+    <div class="val pwd-plain" id="pwdPlain" hidden>Senha em claro: <span class="big plain">{{ pwd_plain }}</span></div>
+    <div class="val">Ultimo update do sidecar: {{ updated }}</div>
 
     <div class="meta-grid">
-      <div class="meta-h">How this app connects to Vault</div>
+      <div class="meta-h">Como esta app se conecta ao Vault</div>
       <div class="meta-row"><span class="meta-k">ServiceAccount</span><span class="meta-v">{{ sa_name }}</span></div>
       <div class="meta-row"><span class="meta-k">VaultConnection address</span><span class="meta-v">{{ vault_addr }}</span></div>
       <div class="meta-row"><span class="meta-k">VaultAuth mount / role</span><span class="meta-v">{{ vault_auth_mount }} &middot; {{ vault_auth_role }}</span></div>
       <div class="meta-row"><span class="meta-k">Database engine mount / role</span><span class="meta-v">{{ vault_db_mount }} &middot; {{ vault_db_role }}</span></div>
-      <div class="meta-row"><span class="meta-k">Configured lease TTL</span><span class="meta-v">{{ vault_db_ttl }}</span></div>
+      <div class="meta-row"><span class="meta-k">Lease TTL configurado</span><span class="meta-v">{{ vault_db_ttl }}</span></div>
     </div>
-    <div class="hint">Chain: SA <code>{{ sa_name }}</code> presents its JWT to auth mount <code>{{ vault_auth_mount }}</code>, gets back a Vault token authorized to read <code>{{ vault_db_mount }}/creds/{{ vault_db_role }}</code>. VSO renews the lease before TTL expires and rewrites K8s Secret <code>db-creds</code>; the sidecar (bitnami/kubectl) copies it into <code>/shared/credentials.txt</code>; Flask re-reads on each request.</div>
+    <div class="hint">Cadeia: SA <code>{{ sa_name }}</code> apresenta seu JWT no auth method <code>{{ vault_auth_mount }}</code>, recebe token Vault com policy de leitura em <code>{{ vault_db_mount }}/creds/{{ vault_db_role }}</code>. VSO renova o lease antes do TTL expirar e atualiza o K8s Secret <code>db-creds</code>; sidecar (bitnami/kubectl) copia pra <code>/shared/credentials.txt</code>; Flask le do arquivo.</div>
   </div>
 </details>
 
 <div class="box timer">
-  <div class="label">Pod uptime</div>
+  <div class="label">Tempo de vida deste pod</div>
   <div class="timer-big">{{ uptime }}</div>
-  <div class="val">started at {{ pod_start }} &middot; pod: <span class="pod">{{ pod_name }}</span></div>
-  <div class="val">If this number only grows, the pod has never restarted.</div>
+  <div class="val">iniciado em {{ pod_start }} &middot; pod: <span class="pod">{{ pod_name }}</span></div>
+  <div class="val">Se este uptime so cresce, o pod NUNCA reiniciou.</div>
 </div>
 
 <details class="box static" data-box="static">
-  <summary><span class="chev">&#9656;</span><div class="label">Pattern 2 &mdash; Static Secret (KV v2, refreshAfter 30s)</div></summary>
+  <summary><span class="chev">&#9656;</span><div class="label">VSO Static — KV demo/data/sidecar/static-config (refreshAfter 30s)</div></summary>
   <div class="box-content">
     <div class="jq">{{ static_html|safe }}</div>
-    <div class="hint">Edit the KV path in Vault and the UI picks it up within ~30s. No pod restart.</div>
+    <div class="hint">Edite o path KV no Vault e a UI atualiza em ≤30s — sem restart do pod.</div>
 
     <div class="meta-grid">
-      <div class="meta-h">How this app connects to Vault</div>
+      <div class="meta-h">Como esta app se conecta ao Vault</div>
       <div class="meta-row"><span class="meta-k">ServiceAccount</span><span class="meta-v">{{ sa_name }}</span></div>
       <div class="meta-row"><span class="meta-k">VaultConnection address</span><span class="meta-v">{{ vault_addr }}</span></div>
       <div class="meta-row"><span class="meta-k">VaultAuth mount / role</span><span class="meta-v">{{ vault_auth_mount }} &middot; {{ vault_auth_role }}</span></div>
@@ -249,32 +249,32 @@ details.box>.box-content{padding:1em 1.5em 1.2em 1.5em}
 </details>
 
 <details class="box pki" data-box="pki">
-  <summary><span class="chev">&#9656;</span><div class="label">Pattern 3 &mdash; PKI Secret (TTL 5m, expiryOffset 2m)</div></summary>
+  <summary><span class="chev">&#9656;</span><div class="label">VSO PKI — cert TLS pki-int/demo-app (TTL 5min, renovacao automatica)</div></summary>
   <div class="box-content">
     <div class="jq">{{ pki_html|safe }}</div>
-    <div class="hint">Serial and validity window rotate every ~3 minutes. VSO renews the cert, kubelet remounts the files, the pod keeps running.</div>
+    <div class="hint">Serial e janela de validade rotacionam a cada ~3 minutos. VSO renova o cert, kubelet remonta os arquivos, o pod continua rodando.</div>
 
     <div class="meta-grid">
-      <div class="meta-h">How this app connects to Vault</div>
+      <div class="meta-h">Como esta app se conecta ao Vault</div>
       <div class="meta-row"><span class="meta-k">ServiceAccount</span><span class="meta-v">{{ sa_name }}</span></div>
       <div class="meta-row"><span class="meta-k">VaultConnection address</span><span class="meta-v">{{ vault_addr }}</span></div>
       <div class="meta-row"><span class="meta-k">VaultAuth mount / role</span><span class="meta-v">{{ vault_auth_mount }} &middot; {{ vault_auth_role }}</span></div>
       <div class="meta-row"><span class="meta-k">PKI engine mount / role</span><span class="meta-v">{{ vault_pki_mount }} &middot; {{ vault_pki_role }}</span></div>
-      <div class="meta-row"><span class="meta-k">Requested CommonName</span><span class="meta-v">{{ vault_pki_cn }}</span></div>
-      <div class="meta-row"><span class="meta-k">Cert TTL / expiryOffset</span><span class="meta-v">{{ vault_pki_ttl }} &middot; renew {{ vault_pki_expiry_offset }} early</span></div>
+      <div class="meta-row"><span class="meta-k">CommonName solicitado</span><span class="meta-v">{{ vault_pki_cn }}</span></div>
+      <div class="meta-row"><span class="meta-k">Cert TTL / expiryOffset</span><span class="meta-v">{{ vault_pki_ttl }} &middot; renova {{ vault_pki_expiry_offset }} antes</span></div>
     </div>
   </div>
 </details>
 
 <details class="box flow" data-box="flow">
-  <summary><span class="chev">&#9656;</span><div class="label">Sidecar pattern (Pattern 1 only)</div></summary>
+  <summary><span class="chev">&#9656;</span><div class="label">Sidecar pattern</div></summary>
   <div class="box-content">
-    <div class="step">VaultDynamicSecret requests fresh DB credentials with a short TTL.</div>
-    <div class="step">Sidecar (kubectl) reads Secret <code>db-creds</code> every 3s.</div>
-    <div class="step">Sidecar writes <code>/shared/credentials.txt</code> on a shared <code>emptyDir</code>.</div>
-    <div class="step">Webapp re-reads the file on each HTTP request.</div>
-    <div class="step">VSO renews the lease at <code>renewalPercent</code> &rarr; Secret updated &rarr; sidecar picks it up within 3s.</div>
-    <div class="step"><strong>Pod uptime keeps increasing. No restart. No request loss.</strong></div>
+    <div class="step">VaultDynamicSecret pede credenciais DB efêmeras com TTL curto.</div>
+    <div class="step">Sidecar (kubectl) le Secret <code>db-creds</code> a cada 3s.</div>
+    <div class="step">Sidecar escreve <code>/shared/credentials.txt</code> num <code>emptyDir</code> compartilhado.</div>
+    <div class="step">Webapp re-le o arquivo a cada request HTTP.</div>
+    <div class="step">VSO renova o lease em <code>renewalPercent</code> → Secret atualizado → sidecar copia em ≤3s.</div>
+    <div class="step"><strong>Tempo de vida deste pod keeps increasing. No restart. No request loss.</strong></div>
   </div>
 </details>
 
@@ -299,13 +299,13 @@ details.box>.box-content{padding:1em 1.5em 1.2em 1.5em}
       return;
     }
     if (on) {
-      btn.textContent = 'Pause auto-refresh';
+      btn.textContent = 'Pausar auto-refresh';
       btn.className = 'on';
-      cd.textContent = 'next: ' + remaining + 's';
+      cd.textContent = 'próximo: ' + remaining + 's';
     } else {
       btn.textContent = 'Resume auto-refresh';
       btn.className = 'off';
-      cd.textContent = 'paused';
+      cd.textContent = 'pausado';
     }
   }
   function tick() {
@@ -336,11 +336,11 @@ window.togglePwd = function(){
   if (!el || !btn) return;
   if (el.hasAttribute('hidden')) {
     el.removeAttribute('hidden');
-    btn.textContent = 'hide plain password';
+    btn.textContent = 'esconder senha';
     btn.classList.add('on');
   } else {
     el.setAttribute('hidden','');
-    btn.textContent = 'show plain password';
+    btn.textContent = 'mostrar senha';
     btn.classList.remove('on');
   }
 };
