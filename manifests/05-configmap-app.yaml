@@ -11,7 +11,7 @@ data:
     """
     vault-vso-demo-app — Flask UI showing three Vault Secrets Operator patterns
     running side-by-side in a single pod that never restarts:
-    
+
       1) Dynamic Secret — PostgreSQL credentials read via a sidecar that polls
          the K8s Secret and writes the values into a shared emptyDir volume.
          The webapp re-reads the file on every request.
@@ -19,7 +19,7 @@ data:
          in-place updates; the webapp re-reads the files each request.
       3) PKI Secret     — Short-lived TLS cert mounted as a Secret volume.
          VSO renews ahead of expiry; kubelet remounts the files.
-    
+
     The pod's uptime counter increments forever to make it obvious that none
     of the three rotation paths require a restart.
     """
@@ -28,26 +28,47 @@ data:
     import socket
     import json
     from datetime import datetime, timezone
-    
+
     from flask import Flask, render_template_string, jsonify
     from cryptography import x509
     from cryptography.hazmat.primitives import hashes
     from pygments import highlight
     from pygments.lexers import JsonLexer
     from pygments.formatters import HtmlFormatter
-    
+
     app = Flask(__name__)
     POD_START = datetime.now(timezone.utc)
     POD_NAME = os.getenv("HOSTNAME", socket.gethostname())
-    
+
     # Paths populated by the sidecar / kubelet.
     CREDS_FILE = "/shared/credentials.txt"   # written by the sidecar
     STATIC_DIR = "/static-config"            # mounted from VaultStaticSecret
     PKI_CRT = "/tls/tls.crt"                 # mounted from VaultPKISecret
-    
+
     counter = 0
-    
-    
+
+    # Static metadata about how this pod connects to Vault. Sourced from env
+    # vars set on the Deployment — read once at boot.
+    VAULT_META = {
+        "sa_name": os.getenv("SA_NAME", "app-sidecar"),
+        "vault_addr": os.getenv("VAULT_ADDR", "n/a"),
+        "vault_auth_mount": os.getenv("VAULT_AUTH_MOUNT", "n/a"),
+        "vault_auth_role": os.getenv("VAULT_AUTH_ROLE", "n/a"),
+        "vault_db_mount": os.getenv("VAULT_DB_MOUNT", "n/a"),
+        "vault_db_role": os.getenv("VAULT_DB_ROLE", "n/a"),
+        "vault_db_ttl": os.getenv("VAULT_DB_TTL", "90s"),
+        "vault_kv_mount": os.getenv("VAULT_KV_MOUNT", "n/a"),
+        "vault_kv_path": os.getenv("VAULT_KV_PATH", "n/a"),
+        "vault_kv_type": os.getenv("VAULT_KV_TYPE", "kv-v2"),
+        "vault_kv_refresh": os.getenv("VAULT_KV_REFRESH", "30s"),
+        "vault_pki_mount": os.getenv("VAULT_PKI_MOUNT", "n/a"),
+        "vault_pki_role": os.getenv("VAULT_PKI_ROLE", "n/a"),
+        "vault_pki_cn": os.getenv("VAULT_PKI_CN", "n/a"),
+        "vault_pki_ttl": os.getenv("VAULT_PKI_TTL", "5m"),
+        "vault_pki_expiry_offset": os.getenv("VAULT_PKI_EXPIRY_OFFSET", "2m"),
+    }
+
+
     def read_credentials():
         """Read DB credentials from the shared volume (refreshed by the sidecar)."""
         try:
@@ -60,8 +81,8 @@ data:
                 return data
         except FileNotFoundError:
             return {}
-    
-    
+
+
     def read_static_config():
         """Read the static config Secret directory (mounted by VSO Static)."""
         if not os.path.isdir(STATIC_DIR):
@@ -78,8 +99,8 @@ data:
             return result if result else {"_status": "secret is empty"}
         except Exception as e:
             return {"_error": str(e)}
-    
-    
+
+
     def read_pki_cert():
         """Parse the PKI cert (renewed by VSO before expiry)."""
         if not os.path.isfile(PKI_CRT):
@@ -104,24 +125,24 @@ data:
             }
         except Exception as e:
             return {"_error": str(e)}
-    
-    
+
+
     def hl_json(data):
         """Render a dict as jq-like syntax-highlighted JSON via Pygments."""
         js = json.dumps(data, indent=2, ensure_ascii=False, sort_keys=False)
         return highlight(js, JsonLexer(),
                          HtmlFormatter(style="monokai", noclasses=True, nobackground=True))
-    
-    
+
+
     def pwd_hash(pwd):
         if not pwd:
             return "n/a"
         h = hashlib.sha256(pwd.encode()).hexdigest()
         return f"sha256:{h[:12]}"
-    
-    
+
+
     PAGE = """<!DOCTYPE html><html lang="en"><head>
-    <meta charset="utf-8"><title>Vault Secrets Operator — three patterns, one pod</title>
+    <meta charset="utf-8"><title>Vault — Sidecar Refresh (sem restart)</title>
     <style>
     body{font-family:-apple-system,Segoe UI,sans-serif;max-width:920px;margin:1.5em auto;padding:1.5em;background:#0f172a;color:#e2e8f0}
     h1{color:#a855f7;margin:0 0 .3em 0;font-size:1.7em}
@@ -150,63 +171,123 @@ data:
     .controls button.off{background:#ef4444;border-color:#b91c1c;color:white;font-weight:600}
     .controls .countdown{color:#fbbf24;font-family:'SF Mono',Consolas,monospace;font-size:.9em;margin-left:auto}
     .controls select{background:#0b1220;color:#e2e8f0;border:1px solid #475569;padding:.45em .7em;border-radius:6px;font-size:.9em;font-family:inherit}
+    details.box{padding:0}
+    details.box>summary{list-style:none;cursor:pointer;padding:1.2em 1.5em;display:flex;align-items:center;gap:.7em;border-radius:10px;user-select:none}
+    details.box>summary::-webkit-details-marker{display:none}
+    details.box>summary::marker{display:none}
+    details.box[open]>summary{border-radius:10px 10px 0 0;border-bottom:1px solid #334155}
+    details.box>summary .chev{display:inline-block;transition:transform .18s ease;color:#94a3b8;font-size:1em;flex:0 0 auto}
+    details.box[open]>summary .chev{transform:rotate(90deg)}
+    details.box>summary .label{margin-bottom:0;flex:1}
+    details.box>.box-content{padding:1em 1.5em 1.2em 1.5em}
+    .reveal-btn{background:#334155;color:#e2e8f0;border:1px solid #475569;padding:.15em .65em;border-radius:5px;font-size:.78em;cursor:pointer;font-family:inherit;margin-left:.6em;vertical-align:middle}
+    .reveal-btn:hover{background:#475569}
+    .reveal-btn.on{background:#fbbf24;border-color:#d97706;color:#0f172a;font-weight:600}
+    .pwd-plain .big.plain{color:#fbbf24;font-family:'SF Mono',Consolas,monospace}
+    .meta-grid{margin-top:.9em;border-top:1px dashed #334155;padding-top:.7em}
+    .meta-h{color:#a855f7;font-size:.78em;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.5em;font-weight:600}
+    .meta-row{display:flex;justify-content:space-between;align-items:baseline;gap:1em;padding:.18em 0;font-size:.88em;border-bottom:1px solid #1e293b}
+    .meta-row:last-child{border-bottom:0}
+    .meta-k{color:#94a3b8;flex:0 0 auto}
+    .meta-v{font-family:'SF Mono',Consolas,monospace;color:#7dd3fc;text-align:right;word-break:break-all}
     </style>
     </head><body>
-    <h1>Vault Secrets Operator &mdash; three patterns, zero restarts</h1>
-    <p class="sub">One pod consumes secrets from Vault through three different VSO resources (Dynamic, Static, PKI). Each block below re-reads its source on every request. The pod uptime counter just keeps growing.</p>
-    
+    <h1>🔄 Vault — Sidecar Refresh (pod NUNCA restarta)</h1>
+    <p class="sub">Sidecar le credenciais do K8s Secret e escreve em <code>/shared/credentials.txt</code>. Esta app re-le do arquivo a cada request. Quando o VSO atualiza o Secret (renovacao do lease Vault), o sidecar copia pro volume. Webapp continua rodando — sem rolloutRestartTargets.</p>
+
     <div class="controls">
-      <button id="toggleBtn" onclick="toggleAuto()">Pause auto-refresh</button>
-      <button onclick="window.location.reload()">Refresh now</button>
-      <label>Interval:
+      <button id="toggleBtn" onclick="toggleAuto()">Pausar auto-refresh</button>
+      <button onclick="window.location.reload()">🔄 Atualizar agora</button>
+      <label>Intervalo:
         <select id="intervalSel" onchange="changeInterval()">
-          <option value="3">3s (fast)</option>
-          <option value="10" selected>10s (default)</option>
+          <option value="3">3s (rapido)</option>
+          <option value="10" selected>10s (normal)</option>
           <option value="30">30s</option>
           <option value="60">60s</option>
           <option value="0">manual</option>
         </select>
       </label>
-      <span class="countdown" id="countdown">next: 10s</span>
+      <span class="countdown" id="countdown">próximo: 10s</span>
     </div>
-    
-    <div class="box cred">
-      <div class="label">Pattern 1 &mdash; Dynamic Secret (PostgreSQL via sidecar)</div>
-      <div class="val">DB user: <span class="big">{{ db_user }}</span></div>
-      <div class="val">Password (sha256, 12 chars): <span class="big">{{ pwd_fp }}</span></div>
-      <div class="val">Last sidecar update: {{ updated }}</div>
-      <div class="hint">Sidecar polls K8s Secret <code>db-creds</code> every 3s and writes <code>/shared/credentials.txt</code>. VSO renews the Vault lease near expiry; the new values land here without restarting the pod.</div>
-    </div>
-    
+
+    <details class="box cred" data-box="cred">
+      <summary><span class="chev">&#9656;</span><div class="label">Credenciais ATUAIS (lidas agora do volume)</div></summary>
+      <div class="box-content">
+        <div class="val">Usuario PostgreSQL: <span class="big">{{ db_user }}</span></div>
+        <div class="val">
+          Senha (sha256, 12 chars): <span class="big">{{ pwd_fp }}</span>
+          <button class="reveal-btn" type="button" onclick="togglePwd()" id="pwdBtn">mostrar senha</button>
+        </div>
+        <div class="val pwd-plain" id="pwdPlain" hidden>Senha em claro: <span class="big plain">{{ pwd_plain }}</span></div>
+        <div class="val">Ultimo update do sidecar: {{ updated }}</div>
+
+        <div class="meta-grid">
+          <div class="meta-h">Como esta app se conecta ao Vault</div>
+          <div class="meta-row"><span class="meta-k">ServiceAccount</span><span class="meta-v">{{ sa_name }}</span></div>
+          <div class="meta-row"><span class="meta-k">VaultConnection address</span><span class="meta-v">{{ vault_addr }}</span></div>
+          <div class="meta-row"><span class="meta-k">VaultAuth mount / role</span><span class="meta-v">{{ vault_auth_mount }} &middot; {{ vault_auth_role }}</span></div>
+          <div class="meta-row"><span class="meta-k">Database engine mount / role</span><span class="meta-v">{{ vault_db_mount }} &middot; {{ vault_db_role }}</span></div>
+          <div class="meta-row"><span class="meta-k">Lease TTL configurado</span><span class="meta-v">{{ vault_db_ttl }}</span></div>
+        </div>
+        <div class="hint">Cadeia: SA <code>{{ sa_name }}</code> apresenta seu JWT no auth method <code>{{ vault_auth_mount }}</code>, recebe token Vault com policy de leitura em <code>{{ vault_db_mount }}/creds/{{ vault_db_role }}</code>. VSO renova o lease antes do TTL expirar e atualiza o K8s Secret <code>db-creds</code>; sidecar (bitnami/kubectl) copia pra <code>/shared/credentials.txt</code>; Flask le do arquivo.</div>
+      </div>
+    </details>
+
     <div class="box timer">
-      <div class="label">Pod uptime</div>
+      <div class="label">Tempo de vida deste pod</div>
       <div class="timer-big">{{ uptime }}</div>
-      <div class="val">started at {{ pod_start }} &middot; pod: <span class="pod">{{ pod_name }}</span></div>
-      <div class="val">If this number only grows, the pod has never restarted.</div>
+      <div class="val">iniciado em {{ pod_start }} &middot; pod: <span class="pod">{{ pod_name }}</span></div>
+      <div class="val">Se este uptime so cresce, o pod NUNCA reiniciou.</div>
     </div>
-    
-    <div class="box static">
-      <div class="label">Pattern 2 &mdash; Static Secret (KV v2, refreshAfter 30s)</div>
-      <div class="jq">{{ static_html|safe }}</div>
-      <div class="hint">Edit the KV path in Vault and the UI picks it up within ~30s. No pod restart.</div>
-    </div>
-    
-    <div class="box pki">
-      <div class="label">Pattern 3 &mdash; PKI Secret (TTL 5m, expiryOffset 2m)</div>
-      <div class="jq">{{ pki_html|safe }}</div>
-      <div class="hint">Serial and validity window rotate every ~3 minutes. VSO renews the cert, kubelet remounts the files, the pod keeps running.</div>
-    </div>
-    
-    <div class="box flow">
-      <div class="label">Sidecar pattern (Pattern 1 only)</div>
-      <div class="step">VaultDynamicSecret requests fresh DB credentials with a short TTL.</div>
-      <div class="step">Sidecar (kubectl) reads Secret <code>db-creds</code> every 3s.</div>
-      <div class="step">Sidecar writes <code>/shared/credentials.txt</code> on a shared <code>emptyDir</code>.</div>
-      <div class="step">Webapp re-reads the file on each HTTP request.</div>
-      <div class="step">VSO renews the lease at <code>renewalPercent</code> &rarr; Secret updated &rarr; sidecar picks it up within 3s.</div>
-      <div class="step"><strong>Pod uptime keeps increasing. No restart. No request loss.</strong></div>
-    </div>
-    
+
+    <details class="box static" data-box="static">
+      <summary><span class="chev">&#9656;</span><div class="label">VSO Static — KV demo/data/sidecar/static-config (refreshAfter 30s)</div></summary>
+      <div class="box-content">
+        <div class="jq">{{ static_html|safe }}</div>
+        <div class="hint">Edite o path KV no Vault e a UI atualiza em ≤30s — sem restart do pod.</div>
+
+        <div class="meta-grid">
+          <div class="meta-h">Como esta app se conecta ao Vault</div>
+          <div class="meta-row"><span class="meta-k">ServiceAccount</span><span class="meta-v">{{ sa_name }}</span></div>
+          <div class="meta-row"><span class="meta-k">VaultConnection address</span><span class="meta-v">{{ vault_addr }}</span></div>
+          <div class="meta-row"><span class="meta-k">VaultAuth mount / role</span><span class="meta-v">{{ vault_auth_mount }} &middot; {{ vault_auth_role }}</span></div>
+          <div class="meta-row"><span class="meta-k">KV engine mount / path</span><span class="meta-v">{{ vault_kv_mount }} &middot; {{ vault_kv_path }}</span></div>
+          <div class="meta-row"><span class="meta-k">KV engine type</span><span class="meta-v">{{ vault_kv_type }}</span></div>
+          <div class="meta-row"><span class="meta-k">refreshAfter</span><span class="meta-v">{{ vault_kv_refresh }}</span></div>
+        </div>
+      </div>
+    </details>
+
+    <details class="box pki" data-box="pki">
+      <summary><span class="chev">&#9656;</span><div class="label">VSO PKI — cert TLS pki-int/demo-app (TTL 5min, renovacao automatica)</div></summary>
+      <div class="box-content">
+        <div class="jq">{{ pki_html|safe }}</div>
+        <div class="hint">Serial e janela de validade rotacionam a cada ~3 minutos. VSO renova o cert, kubelet remonta os arquivos, o pod continua rodando.</div>
+
+        <div class="meta-grid">
+          <div class="meta-h">Como esta app se conecta ao Vault</div>
+          <div class="meta-row"><span class="meta-k">ServiceAccount</span><span class="meta-v">{{ sa_name }}</span></div>
+          <div class="meta-row"><span class="meta-k">VaultConnection address</span><span class="meta-v">{{ vault_addr }}</span></div>
+          <div class="meta-row"><span class="meta-k">VaultAuth mount / role</span><span class="meta-v">{{ vault_auth_mount }} &middot; {{ vault_auth_role }}</span></div>
+          <div class="meta-row"><span class="meta-k">PKI engine mount / role</span><span class="meta-v">{{ vault_pki_mount }} &middot; {{ vault_pki_role }}</span></div>
+          <div class="meta-row"><span class="meta-k">CommonName solicitado</span><span class="meta-v">{{ vault_pki_cn }}</span></div>
+          <div class="meta-row"><span class="meta-k">Cert TTL / expiryOffset</span><span class="meta-v">{{ vault_pki_ttl }} &middot; renova {{ vault_pki_expiry_offset }} antes</span></div>
+        </div>
+      </div>
+    </details>
+
+    <details class="box flow" data-box="flow">
+      <summary><span class="chev">&#9656;</span><div class="label">Sidecar pattern</div></summary>
+      <div class="box-content">
+        <div class="step">VaultDynamicSecret pede credenciais DB efêmeras com TTL curto.</div>
+        <div class="step">Sidecar (kubectl) le Secret <code>db-creds</code> a cada 3s.</div>
+        <div class="step">Sidecar escreve <code>/shared/credentials.txt</code> num <code>emptyDir</code> compartilhado.</div>
+        <div class="step">Webapp re-le o arquivo a cada request HTTP.</div>
+        <div class="step">VSO renova o lease em <code>renewalPercent</code> → Secret atualizado → sidecar copia em ≤3s.</div>
+        <div class="step"><strong>Tempo de vida deste pod keeps increasing. No restart. No request loss.</strong></div>
+      </div>
+    </details>
+
     <div class="footer">request #{{ counter }} &middot; refresh controls at the top</div>
     <script>
     (function(){
@@ -228,13 +309,13 @@ data:
           return;
         }
         if (on) {
-          btn.textContent = 'Pause auto-refresh';
+          btn.textContent = 'Pausar auto-refresh';
           btn.className = 'on';
-          cd.textContent = 'next: ' + remaining + 's';
+          cd.textContent = 'próximo: ' + remaining + 's';
         } else {
           btn.textContent = 'Resume auto-refresh';
           btn.className = 'off';
-          cd.textContent = 'paused';
+          cd.textContent = 'pausado';
         }
       }
       function tick() {
@@ -259,10 +340,37 @@ data:
       render();
       setInterval(tick, 1000);
     })();
+    window.togglePwd = function(){
+      var el = document.getElementById('pwdPlain');
+      var btn = document.getElementById('pwdBtn');
+      if (!el || !btn) return;
+      if (el.hasAttribute('hidden')) {
+        el.removeAttribute('hidden');
+        btn.textContent = 'esconder senha';
+        btn.classList.add('on');
+      } else {
+        el.setAttribute('hidden','');
+        btn.textContent = 'mostrar senha';
+        btn.classList.remove('on');
+      }
+    };
+    (function(){
+      var STORAGE_KEY = 'vsoDemoBoxOpen';
+      var open = {};
+      try { open = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}') || {}; } catch (e) { open = {}; }
+      document.querySelectorAll('details.box[data-box]').forEach(function(el){
+        var key = el.getAttribute('data-box');
+        if (open[key]) el.setAttribute('open','');
+        el.addEventListener('toggle', function(){
+          open[key] = el.open;
+          try { localStorage.setItem(STORAGE_KEY, JSON.stringify(open)); } catch (e) {}
+        });
+      });
+    })();
     </script>
     </body></html>"""
-    
-    
+
+
     @app.route("/")
     def index():
         global counter
@@ -274,6 +382,7 @@ data:
             PAGE,
             db_user=creds.get("username", "(no creds yet)"),
             pwd_fp=pwd_hash(creds.get("password", "")),
+            pwd_plain=creds.get("password", "(no creds yet)"),
             updated=creds.get("updated", "never"),
             uptime=uptime,
             pod_start=POD_START.strftime("%Y-%m-%d %H:%M:%S UTC"),
@@ -281,9 +390,10 @@ data:
             counter=counter,
             static_html=hl_json(read_static_config()),
             pki_html=hl_json(read_pki_cert()),
+            **VAULT_META,
         )
-    
-    
+
+
     @app.route("/api/info")
     def api_info():
         creds = read_credentials()
@@ -299,15 +409,16 @@ data:
             "pki_cert": read_pki_cert(),
             "pattern": "three VSO patterns, single pod, no restart",
         })
-    
-    
+
+
     @app.route("/healthz")
     def healthz():
         return "ok", 200
-    
-    
+
+
     if __name__ == "__main__":
         app.run(host="0.0.0.0", port=8080)
+
   sidecar.sh: |
     #!/usr/bin/env bash
     # Credential-monitor sidecar.
@@ -321,12 +432,12 @@ data:
     #   NAMESPACE   - the namespace the pod runs in (defaulted by the Deployment).
     #   POLL_SECONDS - how often to refresh from the API (default: 3).
     set -euo pipefail
-    
+
     NAMESPACE="${NAMESPACE:-vso-demo}"
     POLL_SECONDS="${POLL_SECONDS:-3}"
-    
+
     echo "[sidecar] starting credential monitor (namespace=${NAMESPACE}, poll=${POLL_SECONDS}s)"
-    
+
     while true; do
       U=$(kubectl get secret db-creds -n "${NAMESPACE}" -o jsonpath='{.data.username}' 2>/dev/null | base64 -d 2>/dev/null || true)
       P=$(kubectl get secret db-creds -n "${NAMESPACE}" -o jsonpath='{.data.password}' 2>/dev/null | base64 -d 2>/dev/null || true)
@@ -343,3 +454,4 @@ data:
       fi
       sleep "${POLL_SECONDS}"
     done
+
