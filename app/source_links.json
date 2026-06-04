@@ -1,0 +1,18 @@
+{
+  "_meta": {
+    "repo": "juniorjbn/vault-vso-demo-app",
+    "sha": "739b1a6369121625a7133908a9f89d754a37c19e"
+  },
+  "dynamic": {
+    "code": "https://github.com/juniorjbn/vault-vso-demo-app/blob/739b1a6369121625a7133908a9f89d754a37c19e/app/app.py#L84-L95",
+    "yaml": "https://github.com/juniorjbn/vault-vso-demo-app/blob/739b1a6369121625a7133908a9f89d754a37c19e/manifests/04-vault-secrets.yaml#L15-L29"
+  },
+  "static": {
+    "code": "https://github.com/juniorjbn/vault-vso-demo-app/blob/739b1a6369121625a7133908a9f89d754a37c19e/app/app.py#L100-L115",
+    "yaml": "https://github.com/juniorjbn/vault-vso-demo-app/blob/739b1a6369121625a7133908a9f89d754a37c19e/manifests/04-vault-secrets.yaml#L39-L53"
+  },
+  "pki": {
+    "code": "https://github.com/juniorjbn/vault-vso-demo-app/blob/739b1a6369121625a7133908a9f89d754a37c19e/app/app.py#L120-L143",
+    "yaml": "https://github.com/juniorjbn/vault-vso-demo-app/blob/739b1a6369121625a7133908a9f89d754a37c19e/manifests/04-vault-secrets.yaml#L63-L80"
+  }
+}
