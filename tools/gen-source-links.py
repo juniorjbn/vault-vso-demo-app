@@ -21,7 +21,8 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 APP = "app/app.py"
 SECRETS = "manifests/04-vault-secrets.yaml"
-PATTERNS = ["dynamic", "static", "pki"]
+PATTERNS = ["dynamic", "static", "pki",
+            "transform-fpe", "transform-mask", "transform-token"]
 
 
 def sh(*args):
@@ -72,8 +73,6 @@ def main():
             missing.append("%s:code" % p)
         if p in yml:
             entry["yaml"] = "%s/%s#L%d-L%d" % (base, SECRETS, yml[p][0], yml[p][1])
-        else:
-            missing.append("%s:yaml" % p)
         links[p] = entry
 
     with open(os.path.join(ROOT, "app/source_links.json"), "w") as f:

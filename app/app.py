@@ -17,6 +17,8 @@ import os
 import hashlib
 import socket
 import json
+import ssl
+import urllib.request
 from datetime import datetime, timezone, timedelta
 from urllib.parse import quote
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -271,6 +273,77 @@ def pwd_hash(pwd):
     return f"sha256:{h[:12]}"
 
 
+# ============================================================
+# Transform secrets engine — FPE / Masking / Tokenization.
+# Diferente dos blocos VSO (leitura passiva de secret montado): aqui o app
+# CHAMA a API do Vault (transform/encode|decode) com VAULT_TRANSFORM_TOKEN.
+# ============================================================
+_TRANSFORM_ROLE = os.getenv("VAULT_TRANSFORM_ROLE", "cd-testdata")
+_TRANSFORM_TOKEN = os.getenv("VAULT_TRANSFORM_TOKEN", "")
+VAULT_META["vault_ui_transform_url"] = f"{_UI}/ui/vault/secrets/transform/list"
+_SSL_NOVERIFY = ssl.create_default_context()
+_SSL_NOVERIFY.check_hostname = False
+_SSL_NOVERIFY.verify_mode = ssl.CERT_NONE
+
+
+def _transform(transformation, value, decode=False):
+    """POST transform/encode|decode/<role> no Vault; retorna o valor transformado."""
+    op = "decode" if decode else "encode"
+    addr = VAULT_META["vault_addr"].rstrip("/")
+    body = json.dumps({"transformation": transformation, "value": value}).encode()
+    req = urllib.request.Request(
+        f"{addr}/v1/transform/{op}/{_TRANSFORM_ROLE}",
+        data=body, method="POST",
+        headers={"X-Vault-Token": _TRANSFORM_TOKEN, "Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(req, context=_SSL_NOVERIFY, timeout=5) as r:
+        data = json.load(r)["data"]
+    return data["decoded_value"] if decode else data["encoded_value"]
+
+
+# vsolink:transform-fpe:code:start
+def demo_fpe():
+    """FPE (FF3-1, NIST SP 800-38G): cifra preservando o FORMATO, REVERSIVEL. Ex.: CPF."""
+    original = os.getenv("DEMO_CPF", "123.456.789-09")
+    try:
+        enc = _transform("cpf-fpe", original)
+        dec = _transform("cpf-fpe", enc, decode=True)
+        return {"transformation": "cpf-fpe", "tipo": "FPE / FF3-1",
+                "original": original, "transformado": enc, "decifrado": dec,
+                "reversivel": True, "round_trip_ok": dec == original}
+    except Exception as e:
+        return {"_error": str(e), "_dica": "VAULT_TRANSFORM_TOKEN setado? transform/ acessivel?"}
+# vsolink:transform-fpe:code:end
+
+
+# vsolink:transform-mask:code:start
+def demo_masking():
+    """Masking: ofuscacao IRREVERSIVEL (logs/dashboards). Cartao preservando BIN+last4."""
+    original = os.getenv("DEMO_CARD", "4111-1111-1111-1111")
+    try:
+        masked = _transform("card-mask", original)
+        return {"transformation": "card-mask", "tipo": "Masking (irreversivel)",
+                "original": original, "transformado": masked, "reversivel": False}
+    except Exception as e:
+        return {"_error": str(e)}
+# vsolink:transform-mask:code:end
+
+
+# vsolink:transform-token:code:start
+def demo_tokenization():
+    """Tokenization: token HMAC convergente, REVERSIVEL, sem expor o dado original."""
+    original = os.getenv("DEMO_PII", "Rua das Flores, 123, Sao Paulo, SP")
+    try:
+        tok = _transform("pii-token", original)
+        dec = _transform("pii-token", tok, decode=True)
+        return {"transformation": "pii-token", "tipo": "Tokenization (reversivel)",
+                "original": original, "transformado": tok, "decifrado": dec,
+                "reversivel": True, "round_trip_ok": dec == original}
+    except Exception as e:
+        return {"_error": str(e)}
+# vsolink:transform-token:code:end
+
+
 PAGE = """<!DOCTYPE html><html lang="en"><head>
 <meta charset="utf-8"><title>Vault — Sidecar Refresh (sem restart)</title>
 <style>
@@ -283,6 +356,9 @@ h1{color:#a855f7;margin:0 0 .3em 0;font-size:1.7em}
 .box.flow{border-color:#a855f7;font-size:.95em}
 .box.static{border-color:#0ea5e9}
 .box.pki{border-color:#f43f5e}
+.box.transform{border-color:#14b8a6}
+.section{color:#5eead4;font-size:1.15em;margin:1.6em 0 .2em 0;border-top:1px solid #334155;padding-top:1em}
+.sub2{color:#94a3b8;font-size:.85em;margin:.2em 0 .8em 0}
 .jq{font-family:'SF Mono',Consolas,monospace;font-size:.85em;line-height:1.5;background:#0b1220;padding:1em;border-radius:6px;overflow-x:auto;margin:.5em 0}
 .jq pre{margin:0;color:#e2e8f0}
 .hint{color:#94a3b8;font-size:.8em;margin-top:.4em;font-style:italic}
@@ -427,6 +503,54 @@ details.box>.box-content{padding:1em 1.5em 1.2em 1.5em}
   </div>
 </details>
 
+<h2 class="section">Transform secrets engine &mdash; proteção de dados (PCI / LGPD)</h2>
+<p class="sub2">O app chama a API do Vault (<code>transform/encode|decode</code>) em tempo real. Diferente dos blocos VSO acima (leitura passiva), aqui o dado é transformado na hora.</p>
+
+<details class="box transform" data-box="tfpe">
+  <summary><span class="chev">&#9656;</span><div class="label">Transform &mdash; FPE (Format-Preserving Encryption)</div></summary>
+  <div class="box-content">
+    <div class="jq">{{ transform_fpe_html|safe }}</div>
+    <div class="hint">FF3-1 (NIST SP 800-38G): cifra preservando o formato (CPF continua com cara de CPF). <code>round_trip_ok=true</code> prova que o decode devolve o original &mdash; <strong>reversível</strong>.</div>
+    <div class="meta-grid">
+      <div class="meta-h">Onde isso vive no Vault</div>
+      <div class="meta-row"><span class="meta-k">Engine / role</span><span class="meta-v">transform/ &middot; cd-testdata</span></div>
+      <div class="meta-row"><span class="meta-k">Transformation</span><span class="meta-v">cpf-fpe (FPE)</span></div>
+      <div class="meta-row"><span class="meta-k">🔗 Abrir no Vault UI</span><span class="meta-v"><a href="{{ vault_ui_transform_url }}" target="_blank" rel="noopener" style="color:#7dd3fc">transform engine</a></span></div>
+    </div>
+    {{ transform_fpe_links|safe }}
+  </div>
+</details>
+
+<details class="box transform" data-box="tmask">
+  <summary><span class="chev">&#9656;</span><div class="label">Transform &mdash; Masking (irreversível)</div></summary>
+  <div class="box-content">
+    <div class="jq">{{ transform_mask_html|safe }}</div>
+    <div class="hint">Ofuscação <strong>irreversível</strong> pra logs/dashboards. O template preserva BIN + last4 do cartão; o meio vira <code>X</code>. Não há decode.</div>
+    <div class="meta-grid">
+      <div class="meta-h">Onde isso vive no Vault</div>
+      <div class="meta-row"><span class="meta-k">Engine / role</span><span class="meta-v">transform/ &middot; cd-testdata</span></div>
+      <div class="meta-row"><span class="meta-k">Transformation</span><span class="meta-v">card-mask (Masking)</span></div>
+      <div class="meta-row"><span class="meta-k">🔗 Abrir no Vault UI</span><span class="meta-v"><a href="{{ vault_ui_transform_url }}" target="_blank" rel="noopener" style="color:#7dd3fc">transform engine</a></span></div>
+    </div>
+    {{ transform_mask_links|safe }}
+  </div>
+</details>
+
+<details class="box transform" data-box="ttoken">
+  <summary><span class="chev">&#9656;</span><div class="label">Transform &mdash; Tokenization (reversível)</div></summary>
+  <div class="box-content">
+    <div class="jq">{{ transform_token_html|safe }}</div>
+    <div class="hint">Token HMAC convergente: o dado vira um token opaco armazenado no Vault, <strong>reversível</strong> via decode. O original não trafega depois.</div>
+    <div class="meta-grid">
+      <div class="meta-h">Onde isso vive no Vault</div>
+      <div class="meta-row"><span class="meta-k">Engine / role</span><span class="meta-v">transform/ &middot; cd-testdata</span></div>
+      <div class="meta-row"><span class="meta-k">Transformation</span><span class="meta-v">pii-token (Tokenization)</span></div>
+      <div class="meta-row"><span class="meta-k">🔗 Abrir no Vault UI</span><span class="meta-v"><a href="{{ vault_ui_transform_url }}" target="_blank" rel="noopener" style="color:#7dd3fc">transform engine</a></span></div>
+    </div>
+    {{ transform_token_links|safe }}
+  </div>
+</details>
+
 <div class="footer">request #{{ counter }} &middot; refresh controls at the top</div>
 <script>
 (function(){
@@ -539,6 +663,12 @@ def index():
         dynamic_links=src_links("dynamic"),
         static_links=src_links("static"),
         pki_links=src_links("pki"),
+        transform_fpe_html=hl_json(demo_fpe()),
+        transform_mask_html=hl_json(demo_masking()),
+        transform_token_html=hl_json(demo_tokenization()),
+        transform_fpe_links=src_links("transform-fpe"),
+        transform_mask_links=src_links("transform-mask"),
+        transform_token_links=src_links("transform-token"),
         **VAULT_META,
     )
 
