@@ -42,7 +42,7 @@ def anchor_ranges(path, kind):
     lines = open(os.path.join(ROOT, path)).read().splitlines()
     starts, ends = {}, {}
     for i, ln in enumerate(lines, 1):
-        m = re.search(r"vsolink:(\w+):" + re.escape(kind) + r":(start|end)\b", ln)
+        m = re.search(r"vsolink:([\w-]+):" + re.escape(kind) + r":(start|end)\b", ln)
         if m:
             (starts if m.group(2) == "start" else ends)[m.group(1)] = i
     out = {}
