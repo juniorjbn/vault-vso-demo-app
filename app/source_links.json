@@ -1,21 +1,27 @@
 {
   "_meta": {
     "repo": "juniorjbn/vault-vso-demo-app",
-    "sha": "a127a6427cefec42414611dedc6cf6ec6bb63973"
+    "sha": "2c2a36c2968b1efe6285b1f59a955ab0f16bf33f"
   },
   "dynamic": {
-    "code": "https://github.com/juniorjbn/vault-vso-demo-app/blob/a127a6427cefec42414611dedc6cf6ec6bb63973/app/app.py#L144-L155",
-    "yaml": "https://github.com/juniorjbn/vault-vso-demo-app/blob/a127a6427cefec42414611dedc6cf6ec6bb63973/manifests/04-vault-secrets.yaml#L15-L29"
+    "code": "https://github.com/juniorjbn/vault-vso-demo-app/blob/2c2a36c2968b1efe6285b1f59a955ab0f16bf33f/app/app.py#L144-L155",
+    "yaml": "https://github.com/juniorjbn/vault-vso-demo-app/blob/2c2a36c2968b1efe6285b1f59a955ab0f16bf33f/manifests/04-vault-secrets.yaml#L15-L29"
   },
   "static": {
-    "code": "https://github.com/juniorjbn/vault-vso-demo-app/blob/a127a6427cefec42414611dedc6cf6ec6bb63973/app/app.py#L160-L175",
-    "yaml": "https://github.com/juniorjbn/vault-vso-demo-app/blob/a127a6427cefec42414611dedc6cf6ec6bb63973/manifests/04-vault-secrets.yaml#L39-L53"
+    "code": "https://github.com/juniorjbn/vault-vso-demo-app/blob/2c2a36c2968b1efe6285b1f59a955ab0f16bf33f/app/app.py#L160-L175",
+    "yaml": "https://github.com/juniorjbn/vault-vso-demo-app/blob/2c2a36c2968b1efe6285b1f59a955ab0f16bf33f/manifests/04-vault-secrets.yaml#L39-L53"
   },
   "pki": {
-    "code": "https://github.com/juniorjbn/vault-vso-demo-app/blob/a127a6427cefec42414611dedc6cf6ec6bb63973/app/app.py#L180-L258",
-    "yaml": "https://github.com/juniorjbn/vault-vso-demo-app/blob/a127a6427cefec42414611dedc6cf6ec6bb63973/manifests/04-vault-secrets.yaml#L63-L80"
+    "code": "https://github.com/juniorjbn/vault-vso-demo-app/blob/2c2a36c2968b1efe6285b1f59a955ab0f16bf33f/app/app.py#L180-L258",
+    "yaml": "https://github.com/juniorjbn/vault-vso-demo-app/blob/2c2a36c2968b1efe6285b1f59a955ab0f16bf33f/manifests/04-vault-secrets.yaml#L63-L80"
   },
-  "transform-fpe": {},
-  "transform-mask": {},
-  "transform-token": {}
+  "transform-fpe": {
+    "code": "https://github.com/juniorjbn/vault-vso-demo-app/blob/2c2a36c2968b1efe6285b1f59a955ab0f16bf33f/app/app.py#L305-L315"
+  },
+  "transform-mask": {
+    "code": "https://github.com/juniorjbn/vault-vso-demo-app/blob/2c2a36c2968b1efe6285b1f59a955ab0f16bf33f/app/app.py#L320-L328"
+  },
+  "transform-token": {
+    "code": "https://github.com/juniorjbn/vault-vso-demo-app/blob/2c2a36c2968b1efe6285b1f59a955ab0f16bf33f/app/app.py#L333-L343"
+  }
 }
